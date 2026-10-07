@@ -1,6 +1,6 @@
 from flask import Flask, jsonify,request
 from flasgger import Swagger
-
+from flask_cors import CORS
 from dotenv import load_dotenv
 import os
 import math
@@ -20,7 +20,14 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 
 app = Flask(__name__)
+#----security header - X-Content-Type-Options--X-Frame-Options--Referrer-Policy-
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
+    return response
 #-----Helper function for centralized error handling----
 def error_response(message,status_code):
     return jsonify({
@@ -179,7 +186,13 @@ def refresh_token():
             return jsonify({
                 "message": "Invalid refresh token"
             }), 401
-
+        refresh_jti = decoded.get("jti")
+        revoked_refresh_token = revoked_refresh_tokens_collection.find_one(
+                {"refresh_jti":refresh_jti})
+        if revoked_refresh_token :
+            return jsonify({
+                "message":"Refersh Token has been revoked!"
+                    })
         new_access_token = jwt.encode(
             {
                 "user_id": decoded["user_id"],
@@ -191,13 +204,7 @@ def refresh_token():
             SECRET_KEY,
             algorithm="HS256"
         )
-        refresh_jti = decoded.get("jti")
-        revoked_refresh_token = revoked_refresh_tokens_collection.find_one(
-            {"refresh_jti":refresh_jti})
-        if revoked_refresh_token :
-            return jsonify({
-                "message":"Refersh Token has been revoked!"
-            })
+       
         return jsonify({
             "access_token": new_access_token,
             "role":decoded["role"]
@@ -1123,5 +1130,5 @@ swagger = Swagger(app, template=swagger_template)
 
 if __name__ == "__main__":
     app.run(debug=True)
-
+CORS(app)
 app.run(port=5000)
